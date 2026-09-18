@@ -15,6 +15,41 @@ icons/                app icons used by manifest.json and the browser tab
 
 There is no build step and no server code. It's a static site.
 
+## Troubleshooting: "I updated the files but I still see the old bug"
+
+This app installs a service worker so it can open offline. That means
+after you replace files in your GitHub repo, your phone/browser may keep
+using its cached copy for one more load before it notices the update. If
+something looks unfixed right after you redeploy:
+
+1. Refresh the page **twice** (the first load fetches the update, the
+   second one uses it).
+2. If that doesn't do it, do a full reset once: in the browser's site
+   settings for this URL, choose **Clear site data** (or uninstall the
+   Home Screen icon and re-add it). That removes any old cached version
+   for good.
+
+## Troubleshooting: data looks like it "disappeared"
+
+If a device is connected to a GitHub repo (Sync settings shows
+**● Synced (GitHub)**), every page load shows whatever is in that repo's
+file — not what's cached in this browser. So data can *look* like it
+vanished when what's really happened is one of:
+
+- **You're not actually connected yet.** Check the badge next to
+  ⟳ Refresh in the header. If it says **○ Local only**, this device is
+  only using its own browser storage — refreshing never touches GitHub.
+- **The repo/path in Sync settings points somewhere empty or wrong** —
+  e.g. a typo in the file path, or a fresh repo with nothing pushed to it
+  yet. The app now shows a warning toast if this happens while your
+  device still has real local data, specifically so this isn't a silent
+  surprise.
+- **A driver/admin sign-in screen is covering the app.** If you've set up
+  driver accounts, the app requires signing in on each device before
+  showing anything. Signing in as admin (or a driver) now stays signed in
+  across refreshes, but the very first time on a new device you will see
+  a sign-in screen — that's expected, not data loss.
+
 ## 1. Put it on GitHub Pages (hosting)
 
 1. Create a new GitHub repository (public or private — Pages works with either

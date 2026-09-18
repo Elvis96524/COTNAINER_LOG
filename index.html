@@ -942,17 +942,23 @@
       var raw = localStorage.getItem(STORAGE_KEY);
       if(raw){
         var parsed = JSON.parse(raw);
-        if(parsed && parsed.containers && parsed.history){
-          parsed.history.forEach(function(h){
+        if(parsed && typeof parsed === "object"){
+          var out = {
+            containers: (parsed.containers && typeof parsed.containers === "object") ? parsed.containers : {},
+            history: Array.isArray(parsed.history) ? parsed.history : [],
+            truckRecords: Array.isArray(parsed.truckRecords) ? parsed.truckRecords : [],
+            drivers: (parsed.drivers && typeof parsed.drivers === "object") ? parsed.drivers : {},
+            adminPinHash: typeof parsed.adminPinHash === "string" ? parsed.adminPinHash : ""
+          };
+          out.history.forEach(function(h){
             if(!h.date){ h.date = h.timestamp ? String(h.timestamp).slice(0,10) : todayISO(); }
             if(!h.recordedAt){ h.recordedAt = h.timestamp || h.date + "T00:00:00.000Z"; }
           });
-          if(!parsed.truckRecords) parsed.truckRecords = [];
-          return parsed;
+          return out;
         }
       }
     }catch(e){ /* fall through to fresh store */ }
-    return { containers:{}, history:[], truckRecords:[] };
+    return { containers:{}, history:[], truckRecords:[], drivers:{}, adminPinHash:"" };
   }
 
   // saveData(): always caches to this browser (so the app still has its
@@ -1153,7 +1159,16 @@
     try{
       var result = await ghFetchFile(ghConfig);
       if(result.exists){
-        db = result.data;
+        var remote = result.data || {};
+        var remoteEmpty = objEmpty(remote.containers) && arrEmpty(remote.history) && arrEmpty(remote.truckRecords);
+        if(remoteEmpty){
+          var local = loadDataLocal();
+          var localHasData = !objEmpty(local.containers) || !arrEmpty(local.history) || !arrEmpty(local.truckRecords);
+          if(localHasData){
+            showToast("Heads up: the file in your GitHub repo is empty, but this device has local data. Showing the GitHub copy, as usual — check the repo/path in Sync settings if that's unexpected, or use ⟳ Refresh once you've fixed it.", true);
+          }
+        }
+        db = remote;
         if(!db.containers) db.containers = {};
         if(!db.history) db.history = [];
         if(!db.truckRecords) db.truckRecords = [];
@@ -1177,6 +1192,9 @@
     normalizeAuthData();
     checkLoginGate();
   }
+
+  function objEmpty(o){ return !o || Object.keys(o).length === 0; }
+  function arrEmpty(a){ return !Array.isArray(a) || a.length === 0; }
 
   function ghRefresh(){
     if(!ghConfig){
