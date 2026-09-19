@@ -36,19 +36,45 @@ If a device is connected to a GitHub repo (Sync settings shows
 file — not what's cached in this browser. So data can *look* like it
 vanished when what's really happened is one of:
 
-- **You're not actually connected yet.** Check the badge next to
-  ⟳ Refresh in the header. If it says **○ Local only**, this device is
-  only using its own browser storage — refreshing never touches GitHub.
+- **You're not actually connected yet on *this* browser/device/icon.**
+  Check the badge next to ⟳ Refresh in the header. If it says
+  **○ Local only**, this specific browser storage is only using its own
+  data — refreshing never touches GitHub. This is the single most common
+  cause, and it trips people up in a specific way: **on iPhone, an icon
+  added via "Add to Home Screen" can use a separate storage area from
+  Safari itself.** If you set up GitHub sync while browsing in Safari,
+  then open the *Home Screen icon* for the first time, that icon starts
+  out disconnected — with no data — even though Safari still has
+  everything. Reconnecting from inside the icon (⚙ Sync settings) pulls
+  the real data down from GitHub and everything looks normal again; this
+  isn't data loss, it's a separate, empty starting point that needed to
+  be pointed at the same repo. Every distinct entry point (Safari tab,
+  Chrome tab, each Home Screen icon) needs to be connected once.
 - **The repo/path in Sync settings points somewhere empty or wrong** —
   e.g. a typo in the file path, or a fresh repo with nothing pushed to it
-  yet. The app now shows a warning toast if this happens while your
-  device still has real local data, specifically so this isn't a silent
+  yet. The app shows a warning toast if this happens while your device
+  still has real local data, specifically so this isn't a silent
   surprise.
 - **A driver/admin sign-in screen is covering the app.** If you've set up
   driver accounts, the app requires signing in on each device before
   showing anything. Signing in as admin (or a driver) now stays signed in
   across refreshes, but the very first time on a new device you will see
   a sign-in screen — that's expected, not data loss.
+
+### Reconnecting a new device/icon quickly
+
+Since every device needs to be pointed at the same repo once, you can
+save people re-typing the owner/repo/branch/path each time: share a link
+with those details built in, e.g.
+
+```
+https://your-username.github.io/your-repo/?gh_owner=your-username&gh_repo=your-data-repo&gh_branch=main&gh_path=data/container-log.json
+```
+
+Opening ⚙ Sync settings from a link like that pre-fills everything
+except the personal access token — each person still enters their own
+token once (never put a token in a URL; it isn't safe to share that
+way).
 
 ## 1. Put it on GitHub Pages (hosting)
 
@@ -101,10 +127,35 @@ place. To make every device share the same data:
    **● Synced (GitHub)**.
 
 Do this same setup (same token, repo, branch, path) on every phone or
-computer that should share the data. Any of them can then tap **⟳ Refresh**
-to pull in whatever the others have saved. Every save shows up as a commit
-in the data repo, so you also get a full audit trail of changes for free —
-viewable any time in the repo's commit history.
+computer that should share the data. **This one-time setup is the only
+manual step** — after that, syncing is automatic:
+
+- **On load:** the app pulls the latest data the moment it opens.
+- **On every save:** adding a container, changing a status, logging a
+  truck delivery, and so on all push to GitHub automatically in the
+  background — nothing to click.
+- **While it's open:** the app polls GitHub every 30 seconds, and also
+  refreshes immediately whenever the tab or app regains focus (switching
+  back from another app, or back to this browser tab), so a colleague's
+  changes show up without anyone hitting Refresh. It quietly skips a
+  background refresh if you're in the middle of filling out a form (so it
+  never yanks data out from under you) or if you have an unsaved local
+  change still in flight (so it never overwrites your own edit before
+  it's reached GitHub).
+
+⟳ Refresh and ⚙ Sync settings still exist for a manual nudge or to
+change the connection, but day to day nobody needs to touch either.
+
+Every save shows up as a commit in the data repo, so you also get a full
+audit trail of changes for free — viewable any time in the repo's commit
+history.
+
+**Scaling the polling interval:** the default 30-second poll uses one
+GitHub API request per person every 30 seconds — comfortably fine for a
+small team (GitHub allows 5,000 requests/hour per token). For a larger
+team, or to reduce API usage, open `index.html`, search for
+`GH_POLL_INTERVAL_MS`, and raise the number (it's in milliseconds — e.g.
+`60000` for once a minute).
 
 ### Things worth knowing about this setup
 

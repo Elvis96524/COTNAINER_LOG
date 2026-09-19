@@ -870,7 +870,11 @@
       <strong>fine-grained personal access token</strong> scoped to just this one repo,
       with <strong>Contents: Read and write</strong> permission and nothing else.
       The token is stored only in this browser's local storage — never sent anywhere but
-      GitHub's API.
+      GitHub's API. Each browser/device needs to be connected separately (this includes an
+      "Add to Home Screen" icon, which can have its own separate storage from the regular
+      browser on some phones — if data looks missing right after installing the icon, this
+      screen is where you reconnect it). See the README for a link format that pre-fills
+      everything but the token, to make that quick.
     </p>
     <form id="syncForm">
       <div class="field">
@@ -936,6 +940,7 @@
   var ghSaveTimer = null;
   var ghSaving = false;
   var ghSaveAgainAfter = false;
+  var ghSavePending = false; // true whenever a debounced save hasn't been pushed yet
 
   function loadDataLocal(){
     try{
@@ -1120,11 +1125,13 @@
   }
 
   function scheduleGhSave(){
+    ghSavePending = true;
     clearTimeout(ghSaveTimer);
     ghSaveTimer = setTimeout(performGhSave, 1500);
   }
 
   async function performGhSave(){
+    ghSavePending = false;
     if(!ghActive || !ghConfig) return;
     if(ghSaving){ ghSaveAgainAfter = true; return; }
     ghSaving = true;
@@ -1203,6 +1210,38 @@
     }
     return connectGh(false);
   }
+
+  // ---------- background auto-sync ----------
+  // Keeps everyone's screen current without anyone touching Sync settings:
+  // polls GitHub on an interval, and again whenever the tab/app regains
+  // focus (covers "switched back from another app" and "switched tabs").
+  // Skips a refresh if: sync isn't on, a modal is open (don't yank data
+  // out from under someone mid-edit), or a local save is about to fire /
+  // in flight (don't clobber a change that hasn't reached GitHub yet).
+  var GH_POLL_INTERVAL_MS = 30000; // 30s — adjust to taste; see README
+  var GH_MIN_REFRESH_GAP_MS = 8000; // don't refetch more than this often
+  var lastAutoRefreshAt = 0;
+
+  function isAnyModalOpen(){
+    return !!document.querySelector(".modal-backdrop:not(.hidden)");
+  }
+
+  function autoRefreshIfSafe(){
+    if(!ghActive || !ghConfig) return;
+    if(ghSaving || ghSavePending) return;     // a local change hasn't been pushed yet
+    if(isAnyModalOpen()) return;               // don't disrupt someone mid-form
+    var now = Date.now();
+    if(now - lastAutoRefreshAt < GH_MIN_REFRESH_GAP_MS) return;
+    lastAutoRefreshAt = now;
+    connectGh(false); // same as ghRefresh(), without the "not connected" toast
+  }
+
+  setInterval(autoRefreshIfSafe, GH_POLL_INTERVAL_MS);
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible") autoRefreshIfSafe();
+  });
+  window.addEventListener("focus", autoRefreshIfSafe);
 
   async function initGitHubSync(){
     ghConfig = loadGhConfig();
@@ -1595,13 +1634,24 @@
     ghRefresh();
   });
 
+  function getUrlGhDefaults(){
+    var params = new URLSearchParams(window.location.search);
+    return {
+      owner: params.get("gh_owner") || "",
+      repo: params.get("gh_repo") || "",
+      branch: params.get("gh_branch") || "",
+      path: params.get("gh_path") || ""
+    };
+  }
+
   document.getElementById("syncSettingsBtn").addEventListener("click", function(){
     var cfg = ghConfig || {};
+    var urlDefaults = getUrlGhDefaults();
     document.getElementById("gh_token").value = cfg.token || "";
-    document.getElementById("gh_owner").value = cfg.owner || "";
-    document.getElementById("gh_repo").value = cfg.repo || "";
-    document.getElementById("gh_branch").value = cfg.branch || "main";
-    document.getElementById("gh_path").value = cfg.path || "data/container-log.json";
+    document.getElementById("gh_owner").value = cfg.owner || urlDefaults.owner || "";
+    document.getElementById("gh_repo").value = cfg.repo || urlDefaults.repo || "";
+    document.getElementById("gh_branch").value = cfg.branch || urlDefaults.branch || "main";
+    document.getElementById("gh_path").value = cfg.path || urlDefaults.path || "data/container-log.json";
     openModal("syncModal");
   });
 

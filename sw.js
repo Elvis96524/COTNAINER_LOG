@@ -1,11 +1,14 @@
 // Container Log — service worker
-// Network-first for the app's HTML, so a redeploy is visible on the very
-// next load instead of being masked by a stale cached copy. Static assets
-// (icons, manifest) are cache-first with a background refresh, since they
-// change rarely. Live data (GitHub API calls) always goes to the network —
-// this service worker never touches those.
+// Deliberately does NOT intercept the app's HTML at all — navigation
+// requests are left completely alone and go straight to the network,
+// exactly as if there were no service worker for that request. This is
+// the safest option: it fully removes the service worker as a possible
+// reason data or code updates look "stuck" after a refresh. Only a
+// handful of static, rarely-changing assets (icons, manifest) get a
+// light cache, purely so the icon still resolves if opened offline.
+// Live data (GitHub API calls) is never touched by this file.
 
-var CACHE_VERSION = "container-log-v2";
+var CACHE_VERSION = "container-log-v3";
 var APP_SHELL = [
   "./manifest.json",
   "./icons/icon-192.png",
@@ -27,9 +30,10 @@ self.addEventListener("activate", function(event){
   event.waitUntil(
     caches.keys().then(function(names){
       return Promise.all(
-        names.filter(function(n){ return n !== CACHE_VERSION; })
-             .map(function(n){ return caches.delete(n); })
+        names.map(function(n){ return caches.delete(n); }) // drop everything from older versions of this file, no exceptions
       );
+    }).then(function(){
+      return caches.open(CACHE_VERSION).then(function(cache){ return cache.addAll(APP_SHELL); });
     }).then(function(){
       return self.clients.claim();
     })
@@ -44,34 +48,18 @@ function isHtmlRequest(request){
 self.addEventListener("fetch", function(event){
   var url = new URL(event.request.url);
 
-  // Only handle same-origin GET requests. Everything else (GitHub API,
-  // Google Fonts, cdnjs) goes straight to the network so data is always
-  // current and never accidentally cached.
-  if(event.request.method !== "GET" || url.origin !== self.location.origin){
-    return;
-  }
+  // Anything cross-origin (GitHub API, Google Fonts, cdnjs): never touched.
+  if(url.origin !== self.location.origin) return;
 
-  if(isHtmlRequest(event.request)){
-    // Network-first: always try to get the latest index.html. Only use
-    // the cached copy if the network is unavailable (offline).
-    event.respondWith(
-      fetch(event.request).then(function(response){
-        if(response && response.status === 200){
-          var copy = response.clone();
-          caches.open(CACHE_VERSION).then(function(cache){ cache.put(event.request, copy); });
-        }
-        return response;
-      }).catch(function(){
-        return caches.match(event.request).then(function(cached){
-          return cached || caches.match("./index.html");
-        });
-      })
-    );
-    return;
-  }
+  // The HTML document itself: never touched either — always network,
+  // never cached, never intercepted. This guarantees a refresh always
+  // shows exactly what's on the server, with no service-worker layer
+  // that could be serving something stale.
+  if(event.request.method !== "GET" || isHtmlRequest(event.request)) return;
 
-  // Static assets: serve from cache immediately if present, and refresh
-  // the cache in the background for next time.
+  // Everything else same-origin (icons, manifest.json): light cache with
+  // background refresh, since these rarely change and this only affects
+  // whether the icon shows up while offline — never app data.
   event.respondWith(
     caches.match(event.request).then(function(cached){
       var network = fetch(event.request).then(function(response){
